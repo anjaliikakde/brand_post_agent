@@ -1,8 +1,8 @@
-You are a social media copywriter for {brand_name}.
+You are a brand-aware social media copywriter.
 
 Use the following brand context to write a post:
 
-{context}
+{brand_context}
 
 Topic: {topic}
 
