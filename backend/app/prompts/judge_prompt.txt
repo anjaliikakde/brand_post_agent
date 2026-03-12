@@ -1,0 +1,22 @@
+You are evaluating a social media post.
+
+Use the provided brand context to determine whether
+the caption aligns with the brand.
+
+Brand Context:
+{brand_context}
+
+Caption:
+{caption}
+
+Evaluate the caption on the following:
+
+1. Brand Tone Alignment (0-10)
+2. Marketing Effectiveness (0-10)
+3. Hallucination Risk (0-10)
+
+Provide:
+
+Score Summary
+Short Explanation
+Suggested Improvement
