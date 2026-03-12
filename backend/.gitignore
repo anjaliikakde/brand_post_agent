@@ -13,7 +13,11 @@ __pycache__/
 *.pyd
 .Python
 
-
+# Storage (local files, not for git)
+storage/brands/
+storage/posts/
+storage/images/
+storage/jobs/
 
 # Logs
 *.log
