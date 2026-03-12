@@ -11,6 +11,7 @@ import uuid
 from typing import List, Dict
 
 from sentence_transformers import SentenceTransformer
+from fastembed import SparseTextEmbedding                    # CHANGED: added import
 from qdrant_client import models
 from qdrant_client.models import PointStruct, SparseVector
 
@@ -24,6 +25,7 @@ class HybridIngestor:
         self.client = qdrant_manager.client
         self.collection = qdrant_manager.collection_name
         self.dense_model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        self.sparse_model = SparseTextEmbedding(model_name=settings.SPARSE_MODEL)  # CHANGED: added sparse model
 
     def ingest(self, chunks: List[Dict]):
 
@@ -33,14 +35,8 @@ class HybridIngestor:
         # Dense vectors — manual via SentenceTransformer
         dense_vectors = self.dense_model.encode(texts, show_progress_bar=False).tolist()
 
-        # Sparse vectors — let qdrant handle BM25
-        sparse_embeddings = list(
-            self.client._embed_sparse(
-                model=settings.SPARSE_MODEL,
-                texts=texts,
-                is_query=False
-            )
-        )
+        # Sparse vectors — fastembed directly         # CHANGED: replaced _embed_sparse
+        sparse_embeddings = list(self.sparse_model.embed(texts))
 
         points = []
         for i, (dense, sparse, payload) in enumerate(zip(dense_vectors, sparse_embeddings, payloads)):
