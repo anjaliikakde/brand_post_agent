@@ -18,6 +18,8 @@ from openai import OpenAI
 
 from app.core.config import settings
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 
 class EvaluationService:
     """
@@ -28,7 +30,7 @@ class EvaluationService:
 
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
-        self.prompt_path = Path("backend/app/prompts/judge_prompt.txt")
+        self.prompt_path = BASE_DIR / "prompts" / "judge_prompt.txt"
 
         self.model = "gpt-4o-mini"
 
@@ -43,7 +45,7 @@ class EvaluationService:
                 f"Judge prompt not found: {self.prompt_path}"
             )
 
-        return self.prompt_path.read_text()
+        return self.prompt_path.read_text(encoding="utf-8")
 
     # -----------------------------------------
     # BUILD JUDGE PROMPT
@@ -57,9 +59,11 @@ class EvaluationService:
 
         template = self.load_prompt_template()
 
-        prompt = template.format(
-            brand_context=brand_context,
-            caption=caption,
+        # Use replace() — str.format() chokes on the JSON braces in the prompt
+        prompt = (
+            template
+            .replace("{{context}}", brand_context)
+            .replace("{{caption}}", caption)
         )
 
         return prompt

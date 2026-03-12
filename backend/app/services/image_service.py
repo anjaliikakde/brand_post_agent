@@ -19,12 +19,11 @@ class ImageService:
     """
 
     def __init__(self):
-
         # Replicate uses environment variable authentication
         self.client = replicate.Client(api_token=settings.REPLICATE_API_TOKEN)
 
-        # Stable and widely used diffusion model on Replicate
-        self.model = "stability-ai/sdxl"
+        # flux-schnell works without a version hash; fast and high quality
+        self.model = "black-forest-labs/flux-schnell"
 
     # -----------------------------------------
     # IMAGE GENERATION
@@ -35,26 +34,32 @@ class ImageService:
         Generate image using Replicate and save locally.
         """
 
-        output = self.client.run(
-            self.model,
-            input={
-                "prompt": prompt,
-                "num_outputs": 1,
-                "width": 1024,
-                "height": 1024,
-            },
-        )
+        try:
+            output = self.client.run(
+                self.model,
+                input={
+                    "prompt": prompt,
+                    "num_outputs": 1,
+                    "width": 1024,
+                    "height": 1024,
+                },
+            )
+        except Exception as e:
+            raise RuntimeError(f"Replicate generation failed: {e}")
 
-        if not output:
+        # Output can be a generator or list — consume it safely
+        output_list = list(output) if output else []
+
+        if not output_list:
             raise RuntimeError("Replicate returned no image")
 
-        image_url = output[0]
+        image_url = str(output_list[0])  # coerce FileOutput/URL object to string
 
-        # Download image
-        response = requests.get(image_url)
+        # Download image with timeout to prevent hanging
+        response = requests.get(image_url, timeout=30)
 
         if response.status_code != 200:
-            raise RuntimeError("Failed to download generated image")
+            raise RuntimeError(f"Failed to download generated image: HTTP {response.status_code}")
 
         image_path = storage_service.save_generated_image(
             image_name=image_name,

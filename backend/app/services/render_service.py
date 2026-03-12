@@ -22,6 +22,9 @@ from playwright.sync_api import sync_playwright
 
 from app.services.storage_service import storage_service
 
+# Anchored to THIS file's location — works regardless of where uvicorn is launched from
+BASE_DIR = Path(__file__).resolve().parent.parent  # → /app
+
 
 class RenderService:
     """
@@ -29,9 +32,8 @@ class RenderService:
     """
 
     def __init__(self):
-
-        # Template location
-        self.template_path = Path("backend/app/templates/post_template.html")
+        # Always resolves to app/templates/post_template.html
+        self.template_path = BASE_DIR / "templates" / "post_template.html"
 
     # -----------------------------------------
     # LOAD TEMPLATE
@@ -44,7 +46,7 @@ class RenderService:
                 f"Template not found: {self.template_path}"
             )
 
-        return self.template_path.read_text()
+        return self.template_path.read_text(encoding="utf-8")
 
     # -----------------------------------------
     # BUILD HTML
@@ -57,10 +59,12 @@ class RenderService:
 
         template = self.load_template()
 
-        html = template.format(
-            headline=headline,
-            caption=caption,
-            image_path=image_path
+        # str.format() chokes on CSS braces — use replace() instead
+        html = (
+            template
+            .replace("{{headline}}", headline)
+            .replace("{{caption}}", caption)
+            .replace("{{image_path}}", image_path)
         )
 
         return html
@@ -103,9 +107,15 @@ class RenderService:
                 viewport={"width": 1080, "height": 1080}
             )
 
-            page.goto(f"file://{html_file.resolve()}")
+            page.goto(
+                f"file://{html_file.resolve()}",
+                wait_until="networkidle"
+            )
 
-            page.screenshot(path=str(output_image))
+            page.screenshot(
+                path=str(output_image),
+                full_page=False
+            )
 
             browser.close()
 
