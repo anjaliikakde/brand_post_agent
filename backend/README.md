@@ -140,6 +140,4 @@ To run tests or add new features, modify the appropriate modules and restart the
 
 ---
 
-## License
 
-This project does not include a license file.  Add one if you plan to share or distribute the code.
