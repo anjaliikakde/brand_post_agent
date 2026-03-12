@@ -1,8 +1,8 @@
 Based on this social media caption, write a detailed image generation prompt.
 
-Caption: {caption}
+Caption: {{caption}}
 
-Brand context: {context}
+Brand context: {{context}}
 
 Write a single image prompt that is:
 - Photorealistic or clean illustration style

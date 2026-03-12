@@ -2,9 +2,9 @@ You are a brand-aware social media copywriter.
 
 Use the following brand context to write a post:
 
-{brand_context}
+{{brand_context}}
 
-Topic: {topic}
+Topic: {{topic}}
 
 Write:
 - Headline: (max 10 words, punchy and clear)
