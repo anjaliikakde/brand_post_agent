@@ -27,7 +27,8 @@ class GenerationService:
 
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
-        self.prompt_path = Path("backend/app/prompts/caption_prompt.txt")
+        # self.prompt_path = Path("backend/app/prompts/caption_prompt.txt")
+        self.prompt_path = Path(__file__).parent.parent / "prompts" / "caption_prompt.txt"
 
         self.model = "gpt-4o-mini"
 

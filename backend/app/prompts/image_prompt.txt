@@ -1,0 +1,13 @@
+Based on this social media caption, write a detailed image generation prompt.
+
+Caption: {caption}
+
+Brand context: {context}
+
+Write a single image prompt that is:
+- Photorealistic or clean illustration style
+- Matches the brand tone
+- Specific about lighting, composition, and mood
+- No text overlays in the image
+
+Return only the image prompt. Nothing else.

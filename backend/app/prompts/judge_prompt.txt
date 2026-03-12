@@ -1,22 +1,15 @@
-You are evaluating a social media post.
+You are a brand quality evaluator.
 
-Use the provided brand context to determine whether
-the caption aligns with the brand.
+Brand context:
+{context}
 
-Brand Context:
-{brand_context}
-
-Caption:
+Generated caption:
 {caption}
 
-Evaluate the caption on the following:
+Score the caption from 1 to 10 on each dimension:
+1. Tone alignment with the brand voice
+2. Factual accuracy against the brand documents  
+3. Engagement potential for social media
 
-1. Brand Tone Alignment (0-10)
-2. Marketing Effectiveness (0-10)
-3. Hallucination Risk (0-10)
-
-Provide:
-
-Score Summary
-Short Explanation
-Suggested Improvement
+Return valid JSON only:
+{"tone": 0, "accuracy": 0, "engagement": 0, "notes": "your feedback here"}
