@@ -28,6 +28,10 @@ class DocumentService:
         file_bytes: bytes
     ) -> Dict:
 
+        # Guard: reject empty uploads before touching disk
+        if not file_bytes:
+            raise ValueError(f"Uploaded file '{file_name}' is empty.")
+
         # Save file using storage service
         file_path = storage_service.save_brand_document(
             brand_id=brand_id,
@@ -35,9 +39,9 @@ class DocumentService:
             file_bytes=file_bytes
         )
 
-        # Trigger ingestion pipeline
-        ingestion_result = ingestion_service.ingest_pdf(
-            pdf_path=str(file_path),
+        # Trigger ingestion pipeline (supports PDF, TXT, MD, DOCX)
+        ingestion_result = ingestion_service.ingest_document(
+            file_path=str(file_path),
             brand_id=brand_id
         )
 
@@ -45,7 +49,7 @@ class DocumentService:
             "brand_id": brand_id,
             "file_name": file_name,
             "file_path": str(file_path),
-            "ingestion_result": ingestion_result
+            "ingestion_result": ingestion_result,
         }
 
 

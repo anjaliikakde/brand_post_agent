@@ -20,10 +20,11 @@ from typing import Dict
 
 from playwright.sync_api import sync_playwright
 
-from app.services.storage_service import storage_service
-
 # Anchored to THIS file's location — works regardless of where uvicorn is launched from
 BASE_DIR = Path(__file__).resolve().parent.parent  # → /app
+
+# Posts save here — must match the directory FastAPI mounts at /outputs
+OUTPUTS_DIR = BASE_DIR / "outputs"
 
 
 class RenderService:
@@ -32,8 +33,8 @@ class RenderService:
     """
 
     def __init__(self):
-        # Always resolves to app/templates/post_template.html
         self.template_path = BASE_DIR / "templates" / "post_template.html"
+        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # -----------------------------------------
     # LOAD TEMPLATE
@@ -55,11 +56,11 @@ class RenderService:
     def build_html(self, headline: str, caption: str, image_path: str) -> str:
         """
         Inject content into HTML template.
+        image_path must be a file:// URL so Playwright can load it.
         """
 
         template = self.load_template()
 
-        # str.format() chokes on CSS braces — use replace() instead
         html = (
             template
             .replace("{{headline}}", headline)
@@ -78,24 +79,34 @@ class RenderService:
         post_id: str,
         headline: str,
         caption: str,
-        image_path: str
+        image_path: str,
     ) -> Dict:
         """
         Render final social media asset using Playwright.
+
+        Saves to app/outputs/{post_id}/post.png — served by FastAPI at
+        GET /outputs/{post_id}/post.png
         """
+
+        # Fix 1 — save to app/outputs/{post_id}/ not storage/posts/
+        # This is the directory FastAPI mounts at /outputs
+        post_folder = OUTPUTS_DIR / post_id
+        post_folder.mkdir(parents=True, exist_ok=True)
+
+        # Fix 2 — convert raw Windows path to file:// URL so Playwright
+        # can load the image inside the HTML template
+        image_file_url = Path(image_path).resolve().as_uri()
+        # e.g. file:///E:/Superteamsai.../storage/images/abc123.png
 
         html = self.build_html(
             headline=headline,
             caption=caption,
-            image_path=image_path
+            image_path=image_file_url,
         )
-
-        post_folder = storage_service.create_post_folder(post_id)
 
         html_file = post_folder / "render.html"
         output_image = post_folder / "post.png"
 
-        # Save temporary HTML file
         with open(html_file, "w", encoding="utf-8") as f:
             f.write(html)
 
@@ -109,19 +120,19 @@ class RenderService:
 
             page.goto(
                 f"file://{html_file.resolve()}",
-                wait_until="networkidle"
+                wait_until="networkidle",
             )
 
             page.screenshot(
                 path=str(output_image),
-                full_page=False
+                full_page=False,
             )
 
             browser.close()
 
         return {
             "post_id": post_id,
-            "image_path": str(output_image)
+            "image_path": str(output_image),
         }
 
 

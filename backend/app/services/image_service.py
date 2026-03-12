@@ -19,11 +19,11 @@ class ImageService:
     """
 
     def __init__(self):
-        # Replicate uses environment variable authentication
         self.client = replicate.Client(api_token=settings.REPLICATE_API_TOKEN)
 
-        # flux-schnell works without a version hash; fast and high quality
-        self.model = "black-forest-labs/flux-schnell"
+        # flux-dev: significantly better quality than flux-schnell
+        # flux-1.1-pro is the best but costs more — swap if budget allows
+        self.model = "black-forest-labs/flux-dev"
 
     # -----------------------------------------
     # IMAGE GENERATION
@@ -42,21 +42,23 @@ class ImageService:
                     "num_outputs": 1,
                     "width": 1024,
                     "height": 1024,
+                    "num_inference_steps": 28,   # flux-dev sweet spot (schnell uses 4)
+                    "guidance": 3.5,              # prompt adherence — 3-4 is ideal for flux-dev
+                    "output_format": "png",
+                    "output_quality": 100,
                 },
             )
         except Exception as e:
             raise RuntimeError(f"Replicate generation failed: {e}")
 
-        # Output can be a generator or list — consume it safely
         output_list = list(output) if output else []
 
         if not output_list:
             raise RuntimeError("Replicate returned no image")
 
-        image_url = str(output_list[0])  # coerce FileOutput/URL object to string
+        image_url = str(output_list[0])
 
-        # Download image with timeout to prevent hanging
-        response = requests.get(image_url, timeout=30)
+        response = requests.get(image_url, timeout=60)  # flux-dev is slower, increase timeout
 
         if response.status_code != 200:
             raise RuntimeError(f"Failed to download generated image: HTTP {response.status_code}")

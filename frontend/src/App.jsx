@@ -2,70 +2,134 @@ import { useState } from "react";
 
 const API_BASE = "http://localhost:8000";
 
+// Stable brand ID for this session — scopes all uploads + RAG to one namespace
+const SESSION_BRAND_ID = "brand_" + Math.random().toString(36).slice(2, 10);
+
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --cream: #FAF8F4; --ink: #1A1714; --muted: #8A847C;
-    --accent: #D4622A; --accent-light: #F5E6DC;
-    --border: #E8E3DB; --card: #FFFFFF; --success: #2E7D4F; --radius: 16px;
+    --cream: #FAF8F4;
+    --ink: #1A1714;
+    --muted: #8A847C;
+    --accent: #D4622A;
+    --accent-light: #F5E6DC;
+    --border: #E8E3DB;
+    --card: #FFFFFF;
+    --success: #2E7D4F;
+    --radius: 16px;
   }
 
   body { font-family: 'DM Sans', sans-serif; background: var(--cream); color: var(--ink); min-height: 100vh; }
+
   .app { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
+
   .header { margin-bottom: 48px; }
 
   .header-eyebrow {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500;
-    letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent);
-    background: var(--accent-light); padding: 5px 12px; border-radius: 100px; margin-bottom: 16px;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-light); padding: 5px 12px;
+    border-radius: 100px; margin-bottom: 16px;
   }
+
   .header-eyebrow::before {
     content: ''; width: 6px; height: 6px; background: var(--accent);
     border-radius: 50%; animation: pulse 2s ease-in-out infinite;
   }
+
   @keyframes pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.5; transform: scale(0.8); }
   }
 
-  .header h1 { font-family: 'Instrument Serif', serif; font-size: clamp(36px, 6vw, 52px); font-weight: 400; line-height: 1.1; letter-spacing: -0.02em; }
+  .header h1 {
+    font-family: 'Instrument Serif', serif;
+    font-size: clamp(36px, 6vw, 52px); font-weight: 400; line-height: 1.1; letter-spacing: -0.02em;
+  }
+
   .header h1 em { font-style: italic; color: var(--accent); }
+
   .header p { margin-top: 12px; font-size: 15px; color: var(--muted); font-weight: 300; line-height: 1.6; }
 
   .steps { display: flex; align-items: center; margin-bottom: 32px; }
-  .step-item { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0.02em; white-space: nowrap; }
+
+  .step-item {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500;
+    color: var(--muted); letter-spacing: 0.02em; white-space: nowrap;
+  }
+
   .step-item.active { color: var(--ink); }
   .step-item.done { color: var(--success); }
-  .step-num { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0; transition: all 0.2s; }
+
+  .step-num {
+    width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 500; flex-shrink: 0; transition: all 0.2s;
+  }
+
   .step-item.active .step-num { border-color: var(--accent); background: var(--accent); color: white; }
   .step-item.done .step-num { border-color: var(--success); background: var(--success); color: white; }
   .step-line { flex: 1; height: 1px; background: var(--border); margin: 0 10px; }
 
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; margin-bottom: 16px; transition: box-shadow 0.2s ease; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 32px; margin-bottom: 16px; transition: box-shadow 0.2s ease;
+  }
+
   .card:hover { box-shadow: 0 4px 24px rgba(26,23,20,0.06); }
+
   .card-label { font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
 
-  textarea, input[type="text"] { width: 100%; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 300; color: var(--ink); background: transparent; border: none; outline: none; resize: none; line-height: 1.7; caret-color: var(--accent); }
+  textarea, input[type="text"] {
+    width: 100%; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 300;
+    color: var(--ink); background: transparent; border: none; outline: none;
+    resize: none; line-height: 1.7; caret-color: var(--accent);
+  }
+
   textarea::placeholder, input::placeholder { color: var(--border); }
+
   .input-row { display: flex; gap: 12px; align-items: flex-start; }
-  .input-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--accent-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; font-size: 14px; }
+
+  .input-icon {
+    width: 32px; height: 32px; border-radius: 8px; background: var(--accent-light);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 2px; font-size: 14px;
+  }
+
   .divider { height: 1px; background: var(--border); margin: 20px 0; }
 
-  .upload-zone { border: 1.5px dashed var(--border); border-radius: 12px; padding: 32px 24px; text-align: center; cursor: pointer; transition: all 0.2s ease; position: relative; }
+  .upload-zone {
+    border: 1.5px dashed var(--border); border-radius: 12px; padding: 32px 24px;
+    text-align: center; cursor: pointer; transition: all 0.2s ease; position: relative;
+  }
+
   .upload-zone:hover, .upload-zone.drag-over { border-color: var(--accent); background: var(--accent-light); }
+
   .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+
   .upload-icon { font-size: 28px; margin-bottom: 10px; display: block; }
   .upload-title { font-size: 14px; font-weight: 500; color: var(--ink); margin-bottom: 4px; }
   .upload-sub { font-size: 12px; color: var(--muted); }
   .upload-sub span { color: var(--accent); font-weight: 500; }
 
   .file-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
-  .file-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--cream); border-radius: 10px; border: 1px solid var(--border); animation: fadeUp 0.2s ease; }
+
+  .file-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; background: var(--cream); border-radius: 10px;
+    border: 1px solid var(--border); animation: fadeUp 0.2s ease;
+  }
+
   .file-item-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .file-item-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--accent-light); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+
+  .file-item-icon {
+    width: 32px; height: 32px; border-radius: 8px; background: var(--accent-light);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;
+  }
+
   .file-item-name { font-size: 13px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
   .file-item-size { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
@@ -79,12 +143,14 @@ const styles = `
   .remove-btn:hover { color: #CC3333; }
 
   @keyframes spin { to { transform: rotate(360deg); } }
+
   .mini-spinner { width: 11px; height: 11px; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; display: inline-block; flex-shrink: 0; }
 
   .notice { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); padding: 10px 14px; background: var(--cream); border-radius: 10px; border: 1px solid var(--border); margin-top: 12px; }
 
   .chip-label { font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
   .chip { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 6px 14px; border-radius: 100px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s ease; }
   .chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
   .chip.active { border-color: var(--accent); background: var(--accent); color: white; }
@@ -98,25 +164,35 @@ const styles = `
 
   .loading-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 40px 32px; text-align: center; }
   .loading-steps { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+
   .loading-step { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 10px; font-size: 14px; color: var(--muted); background: var(--cream); transition: all 0.3s ease; }
   .loading-step.active { background: var(--accent-light); color: var(--accent); font-weight: 500; }
   .loading-step.done { color: var(--success); }
+
   .step-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
   .loading-step.active .step-dot { animation: pulse 1s ease-in-out infinite; }
+
   .big-spinner { width: 32px; height: 32px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 8px; }
 
   .result-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; animation: fadeUp 0.4s ease; }
+
   @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
   .result-image-wrap { width: 100%; aspect-ratio: 1; background: var(--ink); overflow: hidden; }
   .result-image-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .result-image-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; gap: 8px; }
+
   .result-body { padding: 28px 32px 32px; }
   .result-meta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+
   .result-tag { font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--success); background: #E8F5EE; padding: 4px 10px; border-radius: 100px; }
+
   .copy-btn { font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; cursor: pointer; transition: all 0.15s; }
   .copy-btn:hover { border-color: var(--ink); color: var(--ink); }
+
   .result-headline { font-family: 'Instrument Serif', serif; font-size: 26px; font-weight: 400; line-height: 1.3; margin-bottom: 12px; }
   .result-caption { font-size: 15px; line-height: 1.7; color: #4A4540; font-weight: 300; margin-bottom: 24px; }
+
   .eval-section { border-top: 1px solid var(--border); padding-top: 20px; }
   .eval-label { font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
   .eval-scores { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
@@ -125,6 +201,7 @@ const styles = `
   .score-value span { font-size: 13px; color: var(--muted); }
   .score-name { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .eval-notes { font-size: 13px; line-height: 1.6; color: var(--muted); font-style: italic; padding: 12px 16px; background: var(--cream); border-radius: 8px; border-left: 2px solid var(--accent); }
+
   .error-card { background: #FFF5F5; border: 1px solid #FFCCCC; border-radius: var(--radius); padding: 20px 24px; font-size: 14px; color: #CC3333; display: flex; gap: 10px; align-items: flex-start; animation: fadeUp 0.3s ease; }
 `;
 
@@ -144,10 +221,6 @@ function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
-
-// Stable Qdrant namespace for this browser session
-// All uploaded docs + RAG lookups use this same ID
-const SESSION_BRAND_ID = "brand_" + Math.random().toString(36).slice(2, 10);
 
 export default function App() {
   const [brandContext, setBrandContext] = useState("");
@@ -171,17 +244,16 @@ export default function App() {
       const formData = new FormData();
       formData.append("file", fileObj.file);
 
-      // Docs stored under SESSION_BRAND_ID in Qdrant
       const res = await fetch(`${API_BASE}/brands/${SESSION_BRAND_ID}/documents`, {
         method: "POST",
         body: formData,
       });
 
       if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-      const data = await res.json();
 
+      const data = await res.json();
       setFiles(prev => prev.map((f, i) =>
-        i === index ? { ...f, status: "done", docId: data.document_id || data.id } : f
+        i === index ? { ...f, status: "done", docId: data.id || data.document_id } : f
       ));
     } catch (e) {
       console.error("Upload error:", e);
@@ -217,8 +289,8 @@ export default function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          brand_id: SESSION_BRAND_ID,       // Qdrant namespace — must match upload brand_id
-          brand_context: brandContext,       // fallback text if RAG finds nothing
+          brand_id: SESSION_BRAND_ID,        // ✅ scopes RAG to this session's uploads
+          brand_context: brandContext,        // ✅ fallback if no docs uploaded
           topic: activeTopic,
           document_ids: files
             .filter(f => f.status === "done" && f.docId)
@@ -405,7 +477,7 @@ export default function App() {
           <>
             <div className="result-card">
               <div className="result-image-wrap">
-                {result.image_path ? (
+                {result.post_id ? (
                   <img
                     src={`${API_BASE}/outputs/${result.post_id}/post.png`}
                     alt="Generated post"

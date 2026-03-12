@@ -3,11 +3,12 @@ Document Ingestion Service
 
 Pipeline:
 
-PDF → Extract text → Normalize → Filter → Chunk → Hybrid Vector Ingestion
+File → Extract text (by type) → Normalize → Filter → Chunk → Hybrid Vector Ingestion
 
-Uses:
-- PyMuPDF for PDF parsing
-- Qdrant hybrid ingestion (dense + sparse)
+Supported formats:
+- PDF  → PyMuPDF
+- TXT / MD → plain text read
+- DOCX → python-docx
 """
 
 import re
@@ -26,42 +27,100 @@ class IngestionService:
     """
 
     def __init__(self):
-
         self.chunk_size = settings.CHUNK_SIZE
         self.chunk_overlap = settings.CHUNK_OVERLAP
 
     # -----------------------------------------
-    # PDF TEXT EXTRACTION
+    # EXTRACTION — route by file type
     # -----------------------------------------
+
+    def extract(self, file_path: Path) -> List[Dict]:
+        """
+        Route to the correct extractor based on file extension.
+        """
+        ext = file_path.suffix.lower()
+
+        if ext == ".pdf":
+            return self.extract_pdf(file_path)
+        elif ext in (".txt", ".md"):
+            return self.extract_text(file_path)
+        elif ext in (".doc", ".docx"):
+            return self.extract_docx(file_path)
+        else:
+            raise ValueError(f"Unsupported file type: {ext}")
 
     def extract_pdf(self, pdf_path: Path) -> List[Dict]:
         """
-        Extract page-level text from PDF.
+        Extract page-level text from PDF using PyMuPDF.
         """
-
         documents = []
 
-        with fitz.open(pdf_path) as pdf:
-
+        with fitz.open(str(pdf_path)) as pdf:
             for page_index in range(pdf.page_count):
-
                 page = pdf.load_page(page_index)
-
                 text = page.get_text("text")
 
                 if not text or not text.strip():
                     continue
 
-                documents.append(
-                    {
-                        "text": text.strip(),
-                        "metadata": {
-                            "page": page_index + 1,
-                            "source": pdf_path.name,
-                            "char_count": len(text),
-                        },
-                    }
-                )
+                documents.append({
+                    "text": text.strip(),
+                    "metadata": {
+                        "page": page_index + 1,
+                        "source": pdf_path.name,
+                        "char_count": len(text),
+                    },
+                })
+
+        return documents
+
+    def extract_text(self, file_path: Path) -> List[Dict]:
+        """
+        Extract text from plain .txt or .md files.
+        Treats the whole file as one document.
+        """
+        text = file_path.read_text(encoding="utf-8", errors="ignore").strip()
+
+        if not text:
+            return []
+
+        return [{
+            "text": text,
+            "metadata": {
+                "page": 1,
+                "source": file_path.name,
+                "char_count": len(text),
+            },
+        }]
+
+    def extract_docx(self, file_path: Path) -> List[Dict]:
+        """
+        Extract text from .docx files using python-docx.
+        Each paragraph becomes its own document entry.
+        """
+        try:
+            import docx
+        except ImportError:
+            raise ImportError(
+                "python-docx is required for .docx files. "
+                "Run: pip install python-docx"
+            )
+
+        doc = docx.Document(str(file_path))
+        documents = []
+
+        for i, para in enumerate(doc.paragraphs):
+            text = para.text.strip()
+            if not text:
+                continue
+            documents.append({
+                "text": text,
+                "metadata": {
+                    "page": i + 1,
+                    "source": file_path.name,
+                    "char_count": len(text),
+                },
+            })
 
         return documents
 
@@ -71,33 +130,19 @@ class IngestionService:
 
     def normalize_text(self, text: str) -> str:
         """
-        Clean PDF artifacts.
+        Clean extraction artifacts.
         """
-
         text = text.replace("\r\n", "\n").replace("\r", "\n")
-
         text = re.sub(r"\n{3,}", "\n\n", text)
-
         text = re.sub(r"[ \t]{2,}", " ", text)
-
         text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)
-
         return text.strip()
 
     def normalize_documents(self, docs: List[Dict]) -> List[Dict]:
-
-        normalized = []
-
-        for doc in docs:
-
-            normalized.append(
-                {
-                    "text": self.normalize_text(doc["text"]),
-                    "metadata": doc["metadata"],
-                }
-            )
-
-        return normalized
+        return [
+            {"text": self.normalize_text(doc["text"]), "metadata": doc["metadata"]}
+            for doc in docs
+        ]
 
     # -----------------------------------------
     # DOCUMENT FILTERING
@@ -106,23 +151,23 @@ class IngestionService:
     def filter_documents(self, docs: List[Dict]) -> List[Dict]:
         """
         Remove noisy or low-value pages.
+        For non-PDF files skip the char_count filter since
+        plain text brand docs can be short.
         """
-
         filtered = []
 
         noise_markers = [
-            "isbn",
-            "copyright",
-            "table of contents",
-            "publisher",
-            "all rights reserved",
+            "isbn", "copyright", "table of contents",
+            "publisher", "all rights reserved",
         ]
 
         for doc in docs:
-
             text = doc["text"].lower()
+            source = doc["metadata"].get("source", "")
+            ext = Path(source).suffix.lower()
 
-            if doc["metadata"]["char_count"] < 200:
+            # Only apply length filter to PDFs
+            if ext == ".pdf" and doc["metadata"]["char_count"] < 200:
                 continue
 
             if any(marker in text for marker in noise_markers):
@@ -140,31 +185,20 @@ class IngestionService:
         """
         Split documents into overlapping chunks.
         """
-
         chunks = []
 
         for doc in docs:
-
             words = doc["text"].split()
-
             start = 0
 
             while start < len(words):
-
                 end = start + self.chunk_size
+                chunk_text = " ".join(words[start:end])
 
-                chunk_words = words[start:end]
-
-                chunk_text = " ".join(chunk_words)
-
-                chunks.append(
-                    {
-                        "text": chunk_text,
-                        "metadata": {
-                            **doc["metadata"],
-                        },
-                    }
-                )
+                chunks.append({
+                    "text": chunk_text,
+                    "metadata": {**doc["metadata"]},
+                })
 
                 start = end - self.chunk_overlap
 
@@ -174,18 +208,23 @@ class IngestionService:
     # FULL INGESTION PIPELINE
     # -----------------------------------------
 
-    def ingest_pdf(self, pdf_path: str, brand_id: str) -> Dict:
+    def ingest_document(self, file_path: str, brand_id: str) -> Dict:
         """
-        Full ingestion pipeline.
+        Full ingestion pipeline — works for PDF, TXT, MD, DOCX.
         """
+        file_path = Path(file_path)
 
-        pdf_path = Path(pdf_path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
 
-        if not pdf_path.exists():
-            raise FileNotFoundError(f"PDF not found: {pdf_path}")
+        if file_path.stat().st_size == 0:
+            raise ValueError(f"File is empty: {file_path.name}")
 
-        # 1 Extract text
-        documents = self.extract_pdf(pdf_path)
+        # 1 Extract text (routed by file type)
+        documents = self.extract(file_path)
+
+        if not documents:
+            raise ValueError(f"No text could be extracted from: {file_path.name}")
 
         # 2 Normalize
         normalized = self.normalize_documents(documents)
@@ -193,21 +232,31 @@ class IngestionService:
         # 3 Filter noise
         filtered = self.filter_documents(normalized)
 
-        # 4 Chunk documents
+        # Fall back to normalized if filter removes everything
+        # (e.g. short brand TXT files that hit the noise markers)
+        if not filtered:
+            filtered = normalized
+
+        # 4 Chunk
         chunks = self.chunk_documents(filtered)
 
-        # 5 Attach brand_id metadata
+        # 5 Attach brand_id to every chunk
         for chunk in chunks:
             chunk["metadata"]["brand_id"] = brand_id
 
-        # 6 Hybrid ingestion
+        # 6 Ingest into Qdrant
         hybrid_ingestor.ingest(chunks)
 
         return {
             "pages_extracted": len(documents),
             "chunks_created": len(chunks),
             "brand_id": brand_id,
+            "file_name": file_path.name,
         }
+
+    # Keep old name as alias so nothing else breaks
+    def ingest_pdf(self, pdf_path: str, brand_id: str) -> Dict:
+        return self.ingest_document(pdf_path, brand_id)
 
 
 ingestion_service = IngestionService()
