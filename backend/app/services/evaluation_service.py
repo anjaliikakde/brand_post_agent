@@ -13,6 +13,7 @@ The judge evaluates:
 
 from pathlib import Path
 from typing import Dict
+import json
 
 from openai import OpenAI
 
@@ -88,7 +89,7 @@ class EvaluationService:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an expert marketing reviewer."
+                    "content": "You are an expert marketing reviewer. Respond with valid JSON only. No markdown, no explanation."
                 },
                 {
                     "role": "user",
@@ -98,12 +99,24 @@ class EvaluationService:
             temperature=0,
             max_tokens=300
         )
+        
+        result = response.choices[0].message.content.strip()
 
-        result = response.choices[0].message.content
+        # Bug 2 fix — verify GPT returned JSON, don't trust it blindly
+        try:
+            clean = result.replace("```json", "").replace("```", "").strip()
+            parsed = json.loads(clean)
+            return {"evaluation": json.dumps(parsed)}
+        except json.JSONDecodeError:
+            return {
+                "evaluation": json.dumps({
+                    "tone": 0,
+                    "accuracy": 0,
+                    "engagement": 0,
+                    "notes": f"Evaluation parsing failed. Raw: {result[:200]}"
+                })
+            }
 
-        return {
-            "evaluation": result
-        }
 
 
 evaluation_service = EvaluationService()

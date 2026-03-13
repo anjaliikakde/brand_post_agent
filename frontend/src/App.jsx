@@ -2,8 +2,13 @@ import { useState } from "react";
 
 const API_BASE = "http://localhost:8000";
 
-// Stable brand ID for this session — scopes all uploads + RAG to one namespace
-const SESSION_BRAND_ID = "brand_" + Math.random().toString(36).slice(2, 10);
+const SESSION_BRAND_ID = (() => {
+  const stored = localStorage.getItem("session_brand_id")
+  if (stored) return stored
+  const newId = "brand_" + Math.random().toString(36).slice(2, 10)
+  localStorage.setItem("session_brand_id", newId)
+  return newId
+})()
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');

@@ -10,6 +10,7 @@ Handles the full post generation pipeline:
 """
 
 import re
+from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import uuid
@@ -26,6 +27,9 @@ from app.services.rag_service import rag_service
 
 router = APIRouter()
 _openai = OpenAI(api_key=settings.OPENAI_API_KEY)
+
+# Bug 10 fix — read image prompt from file
+IMAGE_PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "image_prompt.txt"
 
 
 class PostRequest(BaseModel):
@@ -53,19 +57,26 @@ def generate_image_prompt(
 ) -> str:
     """
     Ask the LLM to write a Replicate-optimized visual prompt.
-    Produces a scene description — NOT text on an image.
+    Reads system prompt from image_prompt.txt if available.
     """
+
+    # Bug 10 fix — use image_prompt.txt instead of hardcoded string
+    if IMAGE_PROMPT_PATH.exists():
+        system_content = IMAGE_PROMPT_PATH.read_text(encoding="utf-8").strip()
+    else:
+        system_content = (
+            "You write image generation prompts for social media posts. "
+            "Describe a photographic or illustrated scene that visually represents "
+            "the brand and topic. Never include text, words, letters, or signs in the scene. "
+            "Keep it under 40 words. Be specific about lighting, mood, and subject."
+        )
+
     response = _openai.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
-                "content": (
-                    "You write image generation prompts for social media posts. "
-                    "Describe a photographic or illustrated scene that visually represents "
-                    "the brand and topic. Never include text, words, letters, or signs in the scene. "
-                    "Keep it under 40 words. Be specific about lighting, mood, and subject."
-                ),
+                "content": system_content,
             },
             {
                 "role": "user",
@@ -116,17 +127,27 @@ def generate_post(request: PostRequest):
         elif re.match(r"[\*]*caption[\*]*\s*:", line, re.IGNORECASE):
             caption = clean_text(re.sub(r"(?i)[\*]*caption[\*]*\s*:", "", line))
 
-    # Fallback if LLM didn't use labels
+    # Bug 5 fix — skip preamble lines before picking headline fallback
     if not headline and lines:
-        headline = clean_text(lines[0])
-        caption = clean_text(" ".join(lines[1:])) if len(lines) > 1 else headline
+        preamble = [
+            r"^here (is|are)",
+            r"^sure",
+            r"^of course",
+            r"^below",
+            r"^certainly",
+        ]
+        for line in lines:
+            if not any(re.match(p, line, re.IGNORECASE) for p in preamble):
+                headline = clean_text(line)
+                break
+        remaining = [l for l in lines if l != headline]
+        caption = clean_text(" ".join(remaining)) if remaining else headline
 
     if not caption:
         caption = text_output.strip()
 
     # --------------------------------------------------
     # Step 3 — Generate a VISUAL image prompt via LLM
-    # This produces a scene description, not text on image
     # --------------------------------------------------
     try:
         image_prompt = generate_image_prompt(
@@ -135,7 +156,6 @@ def generate_post(request: PostRequest):
             headline=headline,
         )
     except Exception:
-        # Fallback to a generic brand-safe prompt
         image_prompt = (
             f"Professional lifestyle photography representing {request.topic}, "
             "modern workspace, soft natural lighting, cinematic composition, "
@@ -184,12 +204,16 @@ def generate_post(request: PostRequest):
             caption=caption,
         )
     except Exception:
-        evaluation = {"evaluation": '{"tone": 0, "accuracy": 0, "engagement": 0, "notes": "Evaluation unavailable"}'}
+        evaluation = {
+            "evaluation": '{"tone": 0, "accuracy": 0, "engagement": 0, "notes": "Evaluation unavailable"}'
+        }
 
+    # Bug 7 fix — return rendered post URL so frontend can load it
     return {
         "post_id": post_id,
         "headline": headline,
         "caption": caption,
         "image_path": image["image_path"],
+        "rendered_post_url": f"/outputs/{post_id}/post.png",
         "evaluation": evaluation["evaluation"],
     }

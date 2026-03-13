@@ -82,7 +82,7 @@ class StorageService:
 
         return post_path
 
-    def save_post_metadata(self, post_id: str, metadata: Dict[str, Any]):
+    def save_post_metadata(self, post_id: str, metadata: Dict[str, Any]) -> Path:
 
         post_path = self.create_post_folder(post_id)
 
@@ -90,6 +90,8 @@ class StorageService:
 
         with open(metadata_file, "w") as f:
             json.dump(metadata, f, indent=2)
+        
+        return metadata_file
 
     # ----------------------------------------
     # Image Storage

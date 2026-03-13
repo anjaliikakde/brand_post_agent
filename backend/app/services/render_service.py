@@ -132,8 +132,10 @@ class RenderService:
 
         return {
             "post_id": post_id,
-            "image_path": str(output_image),
+            "output_path": str(output_image),      # fixed: was "image_path"
+            "rendered_url": f"/outputs/{post_id}/post.png",
         }
+        
 
 
 render_service = RenderService()

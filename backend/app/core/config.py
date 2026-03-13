@@ -17,9 +17,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     REPLICATE_API_TOKEN: str
 
-    # ---------- Qdrant ----------
-    # QDRANT_URL: str = "http://localhost:6333"
-    # QDRANT_COLLECTION: str = "brand_knowledge"
+
     # ---------- Qdrant ----------
     QDRANT_URL: str = "http://localhost:6333"
     

@@ -68,7 +68,8 @@ class BrandService:
 
         brands = []
 
-        brands_root = Path("storage/brands")
+        # Bug 6 fix — absolute path so it works regardless of where uvicorn starts
+        brands_root = Path(__file__).resolve().parent.parent.parent / "storage" / "brands"
 
         if not brands_root.exists():
             return brands

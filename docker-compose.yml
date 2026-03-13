@@ -1,0 +1,71 @@
+version: "3.9"
+
+services:
+
+  # ─────────────────────────────────────────
+  # Qdrant Vector Database
+  # ─────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: brand_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      # Local folder mein store hoga — directly visible, backup easy
+      - ./qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # FastAPI Backend
+  # ─────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: brand_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override localhost to Docker service name
+      QDRANT_URL: http://qdrant:6333
+    volumes:
+      # Live reload — code changes reflect immediately
+      - ./backend:/app
+      # Persist uploaded docs, images, posts
+      - ./backend/storage:/app/storage
+      # Persist rendered post PNGs
+      - ./backend/app/outputs:/app/app/outputs
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────
+  # React Frontend
+  # ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: brand_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      # Live reload — frontend code changes reflect immediately
+      - ./frontend:/app
+      # Use container's node_modules, not host's
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+# No named volumes needed — everything stored locally now

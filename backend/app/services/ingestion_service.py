@@ -17,6 +17,8 @@ from typing import List, Dict
 
 import fitz  # PyMuPDF
 
+from langchain_text_splitters import RecursiveCharacterTextSplitter  # CHANGED
+
 from app.vector.hybrid_ingestor import hybrid_ingestor
 from app.core.config import settings
 
@@ -178,29 +180,33 @@ class IngestionService:
         return filtered
 
     # -----------------------------------------
-    # TEXT CHUNKING
+    # TEXT CHUNKING — LangChain RecursiveCharacterTextSplitter
     # -----------------------------------------
 
     def chunk_documents(self, docs: List[Dict]) -> List[Dict]:
         """
-        Split documents into overlapping chunks.
+        Split documents into overlapping chunks using LangChain
+        RecursiveCharacterTextSplitter.
+        chunk_size is in characters (set CHUNK_SIZE=1500 in config).
+        brand_id is attached separately after chunking.
         """
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+            separators=["\n\n", "\n", ". ", " ", ""],
+        )
+
         chunks = []
 
         for doc in docs:
-            words = doc["text"].split()
-            start = 0
-
-            while start < len(words):
-                end = start + self.chunk_size
-                chunk_text = " ".join(words[start:end])
-
+            splits = splitter.split_text(doc["text"])
+            for split in splits:
+                if not split.strip():
+                    continue
                 chunks.append({
-                    "text": chunk_text,
+                    "text": split.strip(),
                     "metadata": {**doc["metadata"]},
                 })
-
-                start = end - self.chunk_overlap
 
         return chunks
 
@@ -211,6 +217,7 @@ class IngestionService:
     def ingest_document(self, file_path: str, brand_id: str) -> Dict:
         """
         Full ingestion pipeline — works for PDF, TXT, MD, DOCX.
+        Single entry point. Routes by file extension internally.
         """
         file_path = Path(file_path)
 
@@ -220,7 +227,7 @@ class IngestionService:
         if file_path.stat().st_size == 0:
             raise ValueError(f"File is empty: {file_path.name}")
 
-        # 1 Extract text (routed by file type)
+        # 1 Extract text — routed by file type via self.extract()
         documents = self.extract(file_path)
 
         if not documents:
@@ -233,14 +240,13 @@ class IngestionService:
         filtered = self.filter_documents(normalized)
 
         # Fall back to normalized if filter removes everything
-        # (e.g. short brand TXT files that hit the noise markers)
         if not filtered:
             filtered = normalized
 
         # 4 Chunk
         chunks = self.chunk_documents(filtered)
 
-        # 5 Attach brand_id to every chunk
+        # 5 Attach brand_id to every chunk payload
         for chunk in chunks:
             chunk["metadata"]["brand_id"] = brand_id
 
@@ -254,8 +260,10 @@ class IngestionService:
             "file_name": file_path.name,
         }
 
-    # Keep old name as alias so nothing else breaks
     def ingest_pdf(self, pdf_path: str, brand_id: str) -> Dict:
+        """
+        Alias kept so nothing else breaks if called directly.
+        """
         return self.ingest_document(pdf_path, brand_id)
 
 
