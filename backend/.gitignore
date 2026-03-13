@@ -17,7 +17,7 @@ __pycache__/
 storage/brands/
 storage/posts/
 storage/images/
-storage/jobs/
+
 
 # Logs
 *.log
